@@ -1,27 +1,105 @@
+use super::*;
 use crate::{mock::*, Error, Event};
-use frame_support::{assert_noop, assert_ok};
+use frame_support::{assert_noop, assert_ok, BoundedVec};
 
 #[test]
-fn it_works_for_default_value() {
+fn create_claim_work() {
 	new_test_ext().execute_with(|| {
-		// Go past genesis block so events get deposited
-		System::set_block_number(1);
-		// Dispatch a signed extrinsic.
-		assert_ok!(TemplateModule::do_something(RuntimeOrigin::signed(1), 42));
-		// Read pallet storage and assert an expected result.
-		assert_eq!(TemplateModule::something(), Some(42));
-		// Assert that the correct event was deposited
-		System::assert_last_event(Event::SomethingStored { something: 42, who: 1 }.into());
-	});
+		let claim = BoundedVec::try_from(vec![0, 1]).unwrap();
+
+		assert_ok!(PoeModule::create_claim(RuntimeOrigin::signed(1), claim.clone()));
+
+		assert_eq!(
+			Proofs::<Test>::get(&claim),
+			Some((1, frame_system::Pallet::<Test>::block_number()))
+		);
+	})
 }
 
 #[test]
-fn correct_error_for_none_value() {
+fn create_claim_failed_when_already_exist() {
 	new_test_ext().execute_with(|| {
-		// Ensure the expected error is thrown when no value is present.
+		let claim = BoundedVec::try_from(vec![0, 1]).unwrap();
+
+		let _ = PoeModule::create_claim(RuntimeOrigin::signed(1), claim.clone());
+
 		assert_noop!(
-			TemplateModule::cause_error(RuntimeOrigin::signed(1)),
-			Error::<Test>::NoneValue
+			PoeModule::create_claim(RuntimeOrigin::signed(1), claim.clone()),
+			Error::<Test>::ProofAlreadyExist
 		);
-	});
+	})
+}
+
+#[test]
+fn revole_claim_work() {
+	new_test_ext().execute_with(|| {
+		let claim = BoundedVec::try_from(vec![0, 1]).unwrap();
+		let _ = PoeModule::create_claim(RuntimeOrigin::signed(1), claim.clone());
+
+		assert_ok!(PoeModule::revole_claim(RuntimeOrigin::signed(1), claim.clone()));
+	})
+}
+
+#[test]
+fn revole_claim_failed_when_claim_is_not_exist() {
+	new_test_ext().execute_with(|| {
+		let claim = BoundedVec::try_from(vec![0, 1]).unwrap();
+		assert_noop!(
+			PoeModule::revole_claim(RuntimeOrigin::signed(1), claim.clone()),
+			Error::<Test>::ClaimNotExist
+		);
+	})
+}
+
+#[test]
+fn revole_claim_failed_when_with_wrong_owner() {
+	new_test_ext().execute_with(|| {
+		let claim = BoundedVec::try_from(vec![0, 1]).unwrap();
+		let _ = PoeModule::create_claim(RuntimeOrigin::signed(1), claim.clone());
+
+		assert_noop!(
+			PoeModule::revole_claim(RuntimeOrigin::signed(2), claim.clone()),
+			Error::<Test>::NotClaimOwner
+		);
+	})
+}
+
+#[test]
+fn transfer_claim_work() {
+	new_test_ext().execute_with(|| {
+		let claim = BoundedVec::try_from(vec![0, 1]).unwrap();
+		let _ = PoeModule::create_claim(RuntimeOrigin::signed(1), claim.clone());
+		let _ = PoeModule::transfer_claim(RuntimeOrigin::signed(1), 2, claim.clone());
+
+		let transfered_claim: BoundedVec<u8, <mock::Test as pallet::Config>::MaxClaimLength> =
+			claim.try_into().unwrap();
+		assert_eq!(
+			Some((2, frame_system::Pallet::<Test>::block_number())),
+			Proofs::<Test>::get(transfered_claim) /* get 从Proofs<T: Config> =
+			                                       * StorageMap{}中获取key对应的值 */
+		);
+	})
+}
+
+#[test]
+fn transfer_claim_failed_when_claim_not_exist() {
+	new_test_ext().execute_with(|| {
+		let claim = BoundedVec::try_from(vec![0, 1]).unwrap();
+		assert_noop!(
+			PoeModule::transfer_claim(RuntimeOrigin::signed(1), 2, claim.clone()),
+			Error::<Test>::ClaimNotExist
+		);
+	})
+}
+
+#[test]
+fn transfer_claim_failed_when_with_wrong_owner() {
+	new_test_ext().execute_with(|| {
+		let claim = BoundedVec::try_from(vec![0, 1]).unwrap();
+		let _ = PoeModule::create_claim(RuntimeOrigin::signed(1), claim.clone());
+		assert_noop!(
+			PoeModule::transfer_claim(RuntimeOrigin::signed(2), 3, claim.clone()),
+			Error::<Test>::NotClaimOwner
+		);
+	})
 }

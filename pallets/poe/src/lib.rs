@@ -8,9 +8,8 @@ pub use pallet::*;
 #[cfg(test)]
 mod mock;
 
-// 暂时不测试
-// #[cfg(test)]
-// mod tests;
+#[cfg(test)]
+mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
@@ -54,8 +53,8 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
-		ClaimCreated(T::AccountId, Vec<u8>),
-		ClaimRevoked(T::AccountId, Vec<u8>),
+		ClaimCreated(T::AccountId, BoundedVec<u8, T::MaxClaimLength>),
+		ClaimRevoked(T::AccountId, BoundedVec<u8, T::MaxClaimLength>),
 	}
 
 	// Errors inform users that something went wrong.
@@ -77,16 +76,16 @@ pub mod pallet {
 	impl<T: Config> Pallet<T> {
 		#[pallet::call_index(1)]
 		#[pallet::weight(0)]
-		pub fn create_claim(origin: OriginFor<T>, claim: Vec<u8>) -> DispatchResultWithPostInfo {
+		pub fn create_claim(
+			origin: OriginFor<T>,
+			claim: BoundedVec<u8, T::MaxClaimLength>,
+		) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
 
-			let bounded_claim = BoundedVec::<u8, T::MaxClaimLength>::try_from(claim.clone())
-				.map_err(|_| Error::<T>::ClaimTooLong)?;
-
-			ensure!(!Proofs::<T>::contains_key(&bounded_claim), Error::<T>::ProofAlreadyExist);
+			ensure!(!Proofs::<T>::contains_key(&claim), Error::<T>::ProofAlreadyExist);
 
 			Proofs::<T>::insert(
-				&bounded_claim,
+				&claim,
 				(sender.clone(), frame_system::Pallet::<T>::block_number()),
 			);
 
@@ -97,14 +96,17 @@ pub mod pallet {
 
 		#[pallet::call_index(2)]
 		#[pallet::weight(0)]
-		pub fn revole_claim(origin: OriginFor<T>, claim: Vec<u8>) -> DispatchResultWithPostInfo {
+		pub fn revole_claim(
+			origin: OriginFor<T>,
+			claim: BoundedVec<u8, T::MaxClaimLength>,
+		) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
-			let bounded_claim = BoundedVec::<u8, T::MaxClaimLength>::try_from(claim.clone())
-				.map_err(|_| Error::<T>::ClaimTooLong)?;
-			let (owner, _) = Proofs::<T>::get(&bounded_claim).ok_or(Error::<T>::ClaimNotExist)?;
+
+			let (owner, _) = Proofs::<T>::get(&claim).ok_or(Error::<T>::ClaimNotExist)?;
 			ensure!(owner == sender, Error::<T>::NotClaimOwner);
 
-			Proofs::<T>::remove(&bounded_claim);
+			Proofs::<T>::remove(&claim);
+
 			Self::deposit_event(Event::ClaimRevoked(sender, claim));
 
 			Ok(().into())
@@ -114,13 +116,14 @@ pub mod pallet {
 		#[pallet::weight(0)]
 		pub fn transfer_claim(
 			origin: OriginFor<T>,
-			claim: BoundedVec<u8, T::MaxClaimLength>,
 			dest: T::AccountId,
+			claim: BoundedVec<u8, T::MaxClaimLength>,
 		) -> DispatchResultWithPostInfo {
 			let sender = ensure_signed(origin)?;
 
 			let (owner, _block_number) =
 				Proofs::<T>::get(&claim).ok_or(Error::<T>::ClaimNotExist)?;
+
 			ensure!(owner == sender, Error::<T>::NotClaimOwner);
 
 			Proofs::<T>::insert(&claim, (dest, frame_system::Pallet::<T>::block_number()));
