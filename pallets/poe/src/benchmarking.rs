@@ -1,34 +1,36 @@
 //! Benchmarking setup for pallet-template
 #![cfg(feature = "runtime-benchmarks")]
 use super::*;
-
-#[allow(unused)]
-use crate::Pallet as Template;
-use frame_benchmarking::v2::*;
+use frame_benchmarking::{benchmarks, v2::*};
+use frame_support::{traits::Get, BoundedVec};
 use frame_system::RawOrigin;
 
-#[benchmarks]
-mod benchmarks {
-	use super::*;
-
-	#[benchmark]
-	fn do_something() {
-		let value = 100u32.into();
+benchmarks! {
+	create_claim {
+		let claim: BoundedVec<u8, T::MaxClaimLength> = vec![0; T::MaxClaimLength::get() as usize].try_into().unwrap();
 		let caller: T::AccountId = whitelisted_caller();
-		#[extrinsic_call]
-		do_something(RawOrigin::Signed(caller), value);
-
-		assert_eq!(Something::<T>::get(), Some(value));
+	}: _(RawOrigin::Signed(caller.clone()), claim.clone())
+	verify {
+		assert!(Proofs::<T>::contains_key(claim));
 	}
 
-	#[benchmark]
-	fn cause_error() {
-		Something::<T>::put(100u32);
+	revole_claim {
+		let claim: BoundedVec<u8, T::MaxClaimLength> = vec![0; T::MaxClaimLength::get() as usize].try_into().unwrap();
 		let caller: T::AccountId = whitelisted_caller();
-		#[extrinsic_call]
-		cause_error(RawOrigin::Signed(caller));
+		Proofs::<T>::insert(&claim, (caller.clone(), frame_system::Pallet::<T>::block_number()));
+	}: _(RawOrigin::Signed(caller.clone()), claim.clone().try_into().unwrap())
+	verify {
+		assert!(!Proofs::<T>::contains_key(claim));
+	}
 
-		assert_eq!(Something::<T>::get(), Some(101u32));
+	transfer_claim {
+		let claim: BoundedVec<u8, T::MaxClaimLength> = vec![0; T::MaxClaimLength::get() as usize].try_into().unwrap();
+		let caller: T::AccountId = whitelisted_caller();
+		let recipient: T::AccountId = account("recipient", 0, 0);
+		Proofs::<T>::insert(&claim, (caller.clone(), frame_system::Pallet::<T>::block_number()));
+	}: _(RawOrigin::Signed(caller.clone()), recipient.clone(), claim.clone())
+	verify {
+		assert_eq!(Proofs::<T>::get(claim).unwrap().0, recipient);
 	}
 
 	impl_benchmark_test_suite!(Template, crate::mock::new_test_ext(), crate::mock::Test);

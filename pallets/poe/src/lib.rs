@@ -13,6 +13,7 @@ mod tests;
 
 #[cfg(feature = "runtime-benchmarks")]
 mod benchmarking;
+
 pub mod weights;
 pub use weights::*;
 
@@ -21,8 +22,6 @@ pub mod pallet {
 	use super::*;
 	use frame_support::pallet_prelude::*;
 	use frame_system::pallet_prelude::*;
-
-	use sp_std::vec::Vec; // solve the Vec type not find problem
 
 	//Pallet<T> 结构体是必须的，但是实际上它不包含任何数据。
 	#[pallet::pallet]
@@ -53,17 +52,21 @@ pub mod pallet {
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
+		// Event emitted when a claim is created.
 		ClaimCreated(T::AccountId, BoundedVec<u8, T::MaxClaimLength>),
+		// Event emitted when a claim is revoked.
 		ClaimRevoked(T::AccountId, BoundedVec<u8, T::MaxClaimLength>),
+		// Event emitted when a claim is transfered.
+		ClaimTransfered(T::AccountId, T::AccountId, BoundedVec<u8, T::MaxClaimLength>),
 	}
 
 	// Errors inform users that something went wrong.
 	#[pallet::error]
 	pub enum Error<T> {
-		ProofAlreadyExist,
-		ClaimTooLong,
-		ClaimNotExist,
-		NotClaimOwner,
+		ProofAlreadyExist, // The claim has already been claimed
+		ClaimTooLong,      // The claim is too long
+		ClaimNotExist,     // The claim does not exist
+		NotClaimOwner,     // The caller is not the owner of the claim
 	}
 
 	#[pallet::hooks]
@@ -74,8 +77,9 @@ pub mod pallet {
 	// Dispatchable functions must be annotated with a weight and must return a DispatchResult.
 	#[pallet::call]
 	impl<T: Config> Pallet<T> {
+		// 创建声明。声明存储在 Proofs 存储映射中，带有区块号和用户的账户 ID。
 		#[pallet::call_index(1)]
-		#[pallet::weight(0)]
+		#[pallet::weight(T::WeightInfo::create_claim())]
 		pub fn create_claim(
 			origin: OriginFor<T>,
 			claim: BoundedVec<u8, T::MaxClaimLength>,
@@ -94,8 +98,9 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		// 撤销声明
 		#[pallet::call_index(2)]
-		#[pallet::weight(0)]
+		#[pallet::weight(T::WeightInfo::revole_claim())]
 		pub fn revole_claim(
 			origin: OriginFor<T>,
 			claim: BoundedVec<u8, T::MaxClaimLength>,
@@ -112,8 +117,9 @@ pub mod pallet {
 			Ok(().into())
 		}
 
+		// 转移声明
 		#[pallet::call_index(3)]
-		#[pallet::weight(0)]
+		#[pallet::weight(T::WeightInfo::transfer_claim())]
 		pub fn transfer_claim(
 			origin: OriginFor<T>,
 			dest: T::AccountId,
@@ -126,7 +132,8 @@ pub mod pallet {
 
 			ensure!(owner == sender, Error::<T>::NotClaimOwner);
 
-			Proofs::<T>::insert(&claim, (dest, frame_system::Pallet::<T>::block_number()));
+			Proofs::<T>::insert(&claim, (&dest, frame_system::Pallet::<T>::block_number()));
+			Self::deposit_event(Event::ClaimTransfered(sender, dest, claim));
 
 			Ok(().into())
 		}

@@ -1,0 +1,27 @@
+
+
+./target/release/node-template \
+benchmark pallet \
+--chain dev \
+--pallet pallet_poe \
+--extrinsic "*" \
+--steps=50 \
+--repeat=20 \
+--execution=wasm \
+--wasm-execution=compiled \
+--output  ./pallets/poe/src/weights.rs \
+--template ./.maintain/frame-weight-template.hbs
+
+
+下面是模板的,正常运行
+./target/release/node-template \
+benchmark pallet \
+--chain dev \
+--pallet pallet_template \
+--extrinsic "*" \
+--steps=50 \
+--repeat=20 \
+--execution=wasm \
+--wasm-execution=compiled \
+--output pallets/template/src/weights.rs \
+--template ./.maintain/frame-weight-template.hbs
