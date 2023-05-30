@@ -20,9 +20,13 @@ pub use weights::*;
 
 #[frame_support::pallet]
 pub mod pallet {
-	use super::*;
-	use frame_support::{pallet_prelude::*, Blake2_128Concat};
-	use frame_system::{ensure_signed, pallet_prelude::OriginFor};
+
+	use frame_support::pallet_prelude::*;
+	use frame_system::pallet_prelude::*;
+
+	use frame_support::traits::Randomness;
+	use sp_io::hashing::blake2_128;
+	//use wasm_bindgen_wasi::randomness;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -33,7 +37,9 @@ pub mod pallet {
 		/// Because this pallet emits events, it depends on the runtime's definition of an event.
 		type RuntimeEvent: From<Event<Self>> + IsType<<Self as frame_system::Config>::RuntimeEvent>;
 		/// Type representing the weight of this pallet
-		type WeightInfo: WeightInfo;
+		//type WeightInfo: WeightInfo;
+
+		type KittyRandomness: Randomness<Self::Hash, Self::BlockNumber>;
 	}
 
 	// KittyId define
@@ -47,30 +53,39 @@ pub mod pallet {
 	#[derive(Clone, Copy, PartialEq, Eq, Default)]
 	pub struct Kitty(pub [u8; 16]);
 
-	// Kitties runtime storage
-	#[pallet::storage]
-	#[pallet::getter(fn kitties)]
-	pub type Kitties<T> = StorageMap<_, Blake2_128Concat, KittyId, Kitty>;
 	// KittyId runtime storage
 	#[pallet::storage]
 	#[pallet::getter(fn next_kitty_id)]
 	pub type NextKittyId<T> = StorageValue<_, KittyId, ValueQuery>;
+	// Kitties runtime storage
+	#[pallet::storage]
+	#[pallet::getter(fn kitties)]
+	pub type Kitties<T> = StorageMap<_, Blake2_128Concat, KittyId, Kitty>;
 	// KittyOwner runtime storage
 	#[pallet::storage]
 	#[pallet::getter(fn kitty_owner)]
 	pub type KittyOwner<T: Config> = StorageMap<_, Blake2_128Concat, KittyId, T::AccountId>;
+	// KittyParent runtime storage
+	#[pallet::storage]
+	#[pallet::getter(fn kitty_parents)]
+	pub type KittyParents<T> =
+		StorageMap<_, Blake2_128Concat, KittyId, (KittyId, KittyId), OptionQuery>;
 
 	// Pallets use events to inform users when important changes are made.
 	#[pallet::event]
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		KittyCreated { who: T::AccountId, kitty_id: KittyId, kitty: Kitty },
+		KittyBred { who: T::AccountId, kitty_id: KittyId, kitty: Kitty },
+		KittyTransferred { who: T::AccountId, recipient: T::AccountId, kitty_id: KittyId },
 	}
 
 	// Errors inform users that something went wrong.
 	#[pallet::error]
 	pub enum Error<T> {
 		InvalidKittyId,
+		SameKittyId,
+		NotOwner,
 	}
 
 	#[pallet::call]
@@ -81,12 +96,64 @@ pub mod pallet {
 		pub fn create(origin: OriginFor<T>) -> DispatchResult {
 			let who = ensure_signed(origin)?;
 			let kitty_id = Self::get_next_id()?;
-			let kitty = Kitty(Default::default());
+			let kitty = Kitty(Self::random_value(&who));
 
 			Kitties::<T>::insert(kitty_id, kitty);
 			KittyOwner::<T>::insert(kitty_id, &who);
 
 			Self::deposit_event(Event::KittyCreated { who, kitty_id, kitty });
+
+			Ok(())
+		}
+
+		/// bred a kitty
+		#[pallet::call_index(1)]
+		#[pallet::weight(0)]
+		pub fn bred(
+			origin: OriginFor<T>,
+			kitty_id_1: KittyId,
+			kitty_id_2: KittyId,
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+
+			ensure!(kitty_id_1 != kitty_id_2, Error::<T>::SameKittyId);
+			ensure!(Kitties::<T>::contains_key(kitty_id_1), Error::<T>::InvalidKittyId);
+			ensure!(Kitties::<T>::contains_key(kitty_id_2), Error::<T>::InvalidKittyId);
+
+			let kitty_id = Self::get_next_id()?;
+			let kitty_1 = Self::kitties(kitty_id_1).unwrap();
+			let kitty_2 = Self::kitties(kitty_id_2).unwrap();
+
+			let select = Self::random_value(&who);
+			let mut data = [0u8; 16];
+			for i in 0..kitty_1.0.len() {
+				data[i] = (kitty_1.0[i] & select[i]) | (kitty_2.0[i] & select[i]);
+			}
+			let kitty = Kitty(data);
+
+			Kitties::<T>::insert(kitty_id, kitty);
+			KittyOwner::<T>::insert(kitty_id, who);
+			KittyParents::<T>::insert(kitty_id, (kitty_id_1, kitty_id_2));
+
+			Ok(())
+		}
+
+		/// transfer a kitty
+		#[pallet::call_index(2)]
+		#[pallet::weight(0)]
+		pub fn transfer(
+			origin: OriginFor<T>,
+			recipient: T::AccountId,
+			kitty_id: KittyId,
+		) -> DispatchResult {
+			let who = ensure_signed(origin)?;
+			ensure!(KittyOwner::<T>::contains_key(kitty_id), Error::<T>::InvalidKittyId);
+
+			let owner = Self::kitty_owner(kitty_id).unwrap();
+			ensure!(who == owner, Error::<T>::NotOwner);
+
+			KittyOwner::<T>::insert(kitty_id, &recipient);
+			Self::deposit_event(Event::KittyTransferred { who, recipient, kitty_id });
 
 			Ok(())
 		}
@@ -103,6 +170,15 @@ pub mod pallet {
 
 				Ok(current_id)
 			})
+		}
+
+		fn random_value(sender: &T::AccountId) -> [u8; 16] {
+			let payload = (
+				T::KittyRandomness::random_seed(),
+				&sender,
+				<frame_system::Pallet<T>>::extrinsic_index(),
+			);
+			payload.using_encoded(blake2_128)
 		}
 	}
 }
