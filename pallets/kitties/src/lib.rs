@@ -25,8 +25,7 @@ pub mod pallet {
 	use frame_system::pallet_prelude::*;
 
 	use frame_support::traits::Randomness;
-	use sp_io::hashing::blake2_128;
-	//use wasm_bindgen_wasi::randomness;
+	use sp_io;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -178,7 +177,7 @@ pub mod pallet {
 				&sender,
 				<frame_system::Pallet<T>>::extrinsic_index(),
 			);
-			payload.using_encoded(blake2_128)
+			payload.using_encoded(sp_io::hashing::blake2_128)
 		}
 	}
 }
