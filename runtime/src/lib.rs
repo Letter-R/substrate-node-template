@@ -51,6 +51,9 @@ pub use pallet_template;
 /// poe
 pub use pallet_poe;
 
+/// kitties
+pub use pallet_kitties;
+
 /// An index to a block.
 pub type BlockNumber = u32;
 
@@ -283,6 +286,14 @@ impl pallet_poe::Config for Runtime {
 	type MaxClaimLength = ConstU32<100>;
 }
 
+/// Configure the pallet-kitties in pallets/kitties.
+use pallet_insecure_randomness_collective_flip;
+impl pallet_insecure_randomness_collective_flip::Config for Runtime {}
+impl pallet_kitties::Config for Runtime {
+	type RuntimeEvent = RuntimeEvent;
+	type Randomness = RandomnessCollectiveFlip;
+}
+
 // Create the runtime by composing the FRAME pallets that were previously configured.
 construct_runtime!(
 	pub struct Runtime
@@ -292,6 +303,7 @@ construct_runtime!(
 		UncheckedExtrinsic = UncheckedExtrinsic,
 	{
 		System: frame_system,
+		RandomnessCollectiveFlip: pallet_insecure_randomness_collective_flip,
 		Timestamp: pallet_timestamp,
 		Aura: pallet_aura,
 		Grandpa: pallet_grandpa,
@@ -300,7 +312,8 @@ construct_runtime!(
 		Sudo: pallet_sudo,
 		// Include the custom logic from the pallet-template in the runtime.
 		TemplateModule: pallet_template,
-		PoeModule: pallet_poe,
+		PoeModule: pallet_poe,   // poe
+		Kitties: pallet_kitties, // kitties
 	}
 );
 

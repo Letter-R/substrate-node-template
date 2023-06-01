@@ -5,18 +5,11 @@
 /// <https://docs.substrate.io/reference/frame-pallets/>
 pub use pallet::*;
 
-/*
 #[cfg(test)]
 mod mock;
 
 #[cfg(test)]
 mod tests;
-*/
-
-#[cfg(feature = "runtime-benchmarks")]
-mod benchmarking;
-pub mod weights;
-pub use weights::*;
 
 #[frame_support::pallet]
 pub mod pallet {
@@ -25,7 +18,7 @@ pub mod pallet {
 	use frame_system::pallet_prelude::*;
 
 	use frame_support::traits::Randomness;
-	use sp_io;
+	use sp_io::hashing::blake2_128;
 
 	#[pallet::pallet]
 	pub struct Pallet<T>(_);
@@ -38,7 +31,7 @@ pub mod pallet {
 		/// Type representing the weight of this pallet
 		//type WeightInfo: WeightInfo;
 
-		type KittyRandomness: Randomness<Self::Hash, Self::BlockNumber>;
+		type Randomness: Randomness<Self::Hash, Self::BlockNumber>;
 	}
 
 	// KittyId define
@@ -75,7 +68,7 @@ pub mod pallet {
 	#[pallet::generate_deposit(pub(super) fn deposit_event)]
 	pub enum Event<T: Config> {
 		KittyCreated { who: T::AccountId, kitty_id: KittyId, kitty: Kitty },
-		KittyBred { who: T::AccountId, kitty_id: KittyId, kitty: Kitty },
+		KittyBreed { who: T::AccountId, kitty_id: KittyId, kitty: Kitty },
 		KittyTransferred { who: T::AccountId, recipient: T::AccountId, kitty_id: KittyId },
 	}
 
@@ -108,7 +101,7 @@ pub mod pallet {
 		/// bred a kitty
 		#[pallet::call_index(1)]
 		#[pallet::weight(0)]
-		pub fn bred(
+		pub fn breed(
 			origin: OriginFor<T>,
 			kitty_id_1: KittyId,
 			kitty_id_2: KittyId,
@@ -131,8 +124,10 @@ pub mod pallet {
 			let kitty = Kitty(data);
 
 			Kitties::<T>::insert(kitty_id, kitty);
-			KittyOwner::<T>::insert(kitty_id, who);
+			KittyOwner::<T>::insert(kitty_id, &who);
 			KittyParents::<T>::insert(kitty_id, (kitty_id_1, kitty_id_2));
+
+			Self::deposit_event(Event::KittyBreed { who, kitty_id, kitty });
 
 			Ok(())
 		}
@@ -173,11 +168,11 @@ pub mod pallet {
 
 		fn random_value(sender: &T::AccountId) -> [u8; 16] {
 			let payload = (
-				T::KittyRandomness::random_seed(),
+				T::Randomness::random_seed(),
 				&sender,
 				<frame_system::Pallet<T>>::extrinsic_index(),
 			);
-			payload.using_encoded(sp_io::hashing::blake2_128)
+			payload.using_encoded(blake2_128)
 		}
 	}
 }
