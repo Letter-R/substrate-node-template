@@ -1,7 +1,11 @@
 use crate as pallet_kitties;
-use frame_support::traits::{ConstU16, ConstU64};
-use pallet_insecure_randomness_collective_flip;
-use sp_core::H256;
+use frame_support::{
+	parameter_types,
+	traits::{tokens::Balance, ConstU16, ConstU64},
+	PalletId,
+};
+use pallet_balances::{self, AccountData};
+use sp_core::{ConstU128, ConstU32, H256};
 use sp_runtime::{
 	testing::Header,
 	traits::{BlakeTwo256, IdentityLookup},
@@ -20,6 +24,7 @@ frame_support::construct_runtime!(
 		System: frame_system,
 		KittiesModule: pallet_kitties,
 		Randomness: pallet_insecure_randomness_collective_flip,
+		Balances: pallet_balances,
 	}
 );
 
@@ -41,7 +46,7 @@ impl frame_system::Config for Test {
 	type BlockHashCount = ConstU64<250>;
 	type Version = ();
 	type PalletInfo = PalletInfo;
-	type AccountData = ();
+	type AccountData = AccountData<u128>;
 	type OnNewAccount = ();
 	type OnKilledAccount = ();
 	type SystemWeightInfo = ();
@@ -50,12 +55,43 @@ impl frame_system::Config for Test {
 	type MaxConsumers = frame_support::traits::ConstU32<16>;
 }
 
+/// Existential deposit.
+pub const EXISTENTIAL_DEPOSIT: u128 = 500;
+
+impl pallet_balances::Config for Test {
+	type MaxLocks = ConstU32<50>;
+	type MaxReserves = ();
+	type ReserveIdentifier = [u8; 8];
+	/// The type for recording an account's balance.
+	type Balance = u128;
+	/// The ubiquitous event type.
+	type RuntimeEvent = RuntimeEvent;
+	type DustRemoval = ();
+	type ExistentialDeposit = ConstU128<EXISTENTIAL_DEPOSIT>;
+	type AccountStore = frame_system::Pallet<Test>;
+	type WeightInfo = pallet_balances::weights::SubstrateWeight<Test>;
+	type FreezeIdentifier = ();
+	type MaxFreezes = ();
+	type HoldIdentifier = ();
+	type MaxHolds = ();
+}
+
+parameter_types! {
+	// b"py/kitty" is &[u8;8]
+	// *b"py/kitty" is [u8;8]
+	pub KittyPalletId:PalletId = PalletId(*b"py/kitty");
+	pub KittyPrice:u128=EXISTENTIAL_DEPOSIT*10;
+}
+
 impl pallet_kitties::Config for Test {
 	type RuntimeEvent = RuntimeEvent;
 	type Randomness = Randomness;
-	//type WeightInfo = ();
+	type Currency = pallet_balances::Pallet<Test>;
+	type KittyPrice = KittyPrice;
+	type PalletId = KittyPalletId;
 }
 
+use pallet_insecure_randomness_collective_flip;
 impl pallet_insecure_randomness_collective_flip::Config for Test {}
 
 // Build genesis storage according to the mock runtime.

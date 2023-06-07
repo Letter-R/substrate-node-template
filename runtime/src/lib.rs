@@ -24,6 +24,7 @@ use sp_version::NativeVersion;
 use sp_version::RuntimeVersion;
 
 // A few exports that help ease life for downstream crates.
+use frame_support::PalletId;
 pub use frame_support::{
 	construct_runtime, parameter_types,
 	traits::{
@@ -289,9 +290,18 @@ impl pallet_poe::Config for Runtime {
 /// Configure the pallet-kitties in pallets/kitties.
 use pallet_insecure_randomness_collective_flip;
 impl pallet_insecure_randomness_collective_flip::Config for Runtime {}
+parameter_types! {
+	// b"py/kitty" is &[u8;8]
+	// *b"py/kitty" is [u8;8]
+	pub KittyPalletId:PalletId = PalletId(*b"py/kitty");
+	pub KittyPrice:Balance = EXISTENTIAL_DEPOSIT*10;
+}
 impl pallet_kitties::Config for Runtime {
 	type RuntimeEvent = RuntimeEvent;
-	type Randomness = RandomnessCollectiveFlip;
+	type Randomness = RandomnessCollectiveFlip; // define in construct_runtime!()
+	type Currency = Balances;
+	type KittyPrice = KittyPrice;
+	type PalletId = KittyPalletId;
 }
 
 // Create the runtime by composing the FRAME pallets that were previously configured.
