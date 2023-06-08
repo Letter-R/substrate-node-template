@@ -1,5 +1,7 @@
 use crate::{mock::*, Error, Event};
 use frame_support::{assert_noop, assert_ok};
+const name: [u8; 8] = *b"12345678";
+
 mod fn_create {
 	use super::*;
 	#[test]
@@ -19,7 +21,7 @@ mod fn_create {
 
 			let balance_before = Balances::free_balance(&account_id);
 
-			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id)));
+			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id), name));
 
 			let balance_after = Balances::free_balance(account_id);
 
@@ -46,7 +48,7 @@ mod fn_create {
 			let account_id = 1;
 			crate::NextKittyId::<Test>::set(crate::KittyId::max_value());
 			assert_noop!(
-				KittiesModule::create(RuntimeOrigin::signed(account_id)),
+				KittiesModule::create(RuntimeOrigin::signed(account_id), name),
 				Error::<Test>::InvalidKittyId
 			);
 		})
@@ -69,14 +71,15 @@ mod fn_breed {
 				10 * price
 			));
 
-			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id)));
-			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id)));
+			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id), name));
+			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id), name));
 			//assert_eq!(KittiesModule::next_kitty_id(), kitty_id + 2);
 
 			assert_ok!(KittiesModule::breed(
 				RuntimeOrigin::signed(account_id),
 				kitty_id,
-				kitty_id + 1
+				kitty_id + 1,
+				name
 			));
 			System::assert_last_event(RuntimeEvent::KittiesModule(Event::KittyBreed {
 				who: account_id,
@@ -101,7 +104,7 @@ mod fn_breed {
 			let account_id = 1;
 
 			assert_noop!(
-				KittiesModule::breed(RuntimeOrigin::signed(account_id), kitty_id, kitty_id),
+				KittiesModule::breed(RuntimeOrigin::signed(account_id), kitty_id, kitty_id, name),
 				Error::<Test>::SameKittyId
 			);
 		})
@@ -114,7 +117,12 @@ mod fn_breed {
 			let account_id = 1;
 
 			assert_noop!(
-				KittiesModule::breed(RuntimeOrigin::signed(account_id), kitty_id, kitty_id + 1),
+				KittiesModule::breed(
+					RuntimeOrigin::signed(account_id),
+					kitty_id,
+					kitty_id + 1,
+					name
+				),
 				Error::<Test>::InvalidKittyId
 			);
 		})
@@ -138,7 +146,7 @@ mod fn_transfer {
 				account_id.clone(),
 				10 * price
 			));
-			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id)));
+			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id), name));
 			assert_eq!(KittiesModule::kitty_owner(kitty_id), Some(account_id));
 
 			assert_ok!(KittiesModule::transfer(
@@ -169,7 +177,7 @@ mod fn_transfer {
 				account_id.clone(),
 				10 * price
 			));
-			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(1)));
+			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(1), name));
 			assert_eq!(KittiesModule::kitty_owner(kitty_id), Some(account_id));
 
 			assert_noop!(
@@ -198,7 +206,7 @@ mod fn_sale {
 				account_id.clone(),
 				10 * price
 			));
-			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id)));
+			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id), name));
 
 			assert_ok!(KittiesModule::sale(RuntimeOrigin::signed(account_id), kitty_id));
 			assert!(KittiesModule::kitty_on_sale(kitty_id).is_some());
@@ -218,7 +226,7 @@ mod fn_sale {
 				account_id_2.clone(),
 				10 * price
 			));
-			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id_2)));
+			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id_2), name));
 
 			assert_noop!(
 				KittiesModule::sale(RuntimeOrigin::signed(account_id_1), kitty_id),
@@ -239,7 +247,7 @@ mod fn_sale {
 				account_id.clone(),
 				10 * price
 			));
-			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id)));
+			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(account_id), name));
 
 			assert_ok!(KittiesModule::sale(RuntimeOrigin::signed(account_id), kitty_id));
 			assert_noop!(
@@ -270,7 +278,7 @@ mod fn_buy {
 				sale_account_id.clone(),
 				10 * price
 			));
-			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(sale_account_id)));
+			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(sale_account_id), name));
 			assert_ok!(KittiesModule::sale(RuntimeOrigin::signed(sale_account_id), kitty_id));
 
 			assert_ok!(KittiesModule::buy(RuntimeOrigin::signed(buy_account_id), kitty_id));
@@ -289,7 +297,7 @@ mod fn_buy {
 				sale_account_id.clone(),
 				10 * price
 			));
-			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(sale_account_id)));
+			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(sale_account_id), name));
 			assert_ok!(KittiesModule::sale(RuntimeOrigin::signed(sale_account_id), kitty_id));
 
 			assert_noop!(
@@ -317,7 +325,7 @@ mod fn_buy {
 				sale_account_id.clone(),
 				10 * price
 			));
-			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(sale_account_id)));
+			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(sale_account_id), name));
 			//assert_ok!(KittiesModule::sale(RuntimeOrigin::signed(sale_account_id), kitty_id));
 
 			assert_noop!(
@@ -345,7 +353,7 @@ mod fn_buy {
 				sale_account_id.clone(),
 				10 * price
 			));
-			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(sale_account_id)));
+			assert_ok!(KittiesModule::create(RuntimeOrigin::signed(sale_account_id), name));
 			assert_ok!(KittiesModule::sale(RuntimeOrigin::signed(sale_account_id), kitty_id));
 
 			assert_noop!(
