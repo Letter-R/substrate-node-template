@@ -189,6 +189,43 @@ pub mod pallet {
 		}
 	}
 
+	#[pallet::validate_unsigned]
+	impl<T: Config> ValidateUnsigned for Pallet<T> {
+		type Call = Call<T>;
+
+		/// Validate unsigned call to this module.
+		///
+		/// By default unsigned transactions are disallowed, but implementing the validator
+		/// here we make sure that some particular calls (the ones produced by offchain worker)
+		/// are being whitelisted and marked as valid.
+		fn validate_unsigned(_source: TransactionSource, call: &Self::Call) -> TransactionValidity {
+			const UNSIGNED_TXS_PRIORITY: u64 = 100;
+			let valid_tx = |provide| {
+				ValidTransaction::with_tag_prefix("my-pallet")
+					.priority(UNSIGNED_TXS_PRIORITY) // please define `UNSIGNED_TXS_PRIORITY` before this line
+					.and_provides([&provide])
+					.longevity(3)
+					.propagate(true)
+					.build()
+			};
+
+			// match call {
+			// 	Call::submit_data_unsigned { key: _ } => valid_tx(b"my_unsigned_tx".to_vec()),
+			// 	_ => InvalidTransaction::Call.into(),
+			// }
+
+			match call {
+				Call::unsigned_extrinsic_with_signed_payload { ref payload, ref signature } => {
+					if !SignedPayload::<T>::verify::<T::AuthorityId>(payload, signature.clone()) {
+						return InvalidTransaction::BadProof.into()
+					}
+					valid_tx(b"unsigned_extrinsic_with_signed_payload".to_vec())
+				},
+				_ => InvalidTransaction::Call.into(),
+			}
+		}
+	}
+
 	#[pallet::hooks]
 	impl<T: Config> Hooks<BlockNumberFor<T>> for Pallet<T> {
 		fn offchain_worker(block_number: T::BlockNumber) {
@@ -206,7 +243,28 @@ pub mod pallet {
 
 			//
 			// step2: make the transction
-
+			// Retrieve the signer to sign the payload
+			let signer = Signer::<T, T::AuthorityId>::any_account();
+			if let Some((_, res)) = signer.send_unsigned_transaction(
+				// this line is to prepare and return payload
+				|acct| Payload { price: infor.clone(), public: acct.public.clone() },
+				|payload, signature| Call::unsigned_extrinsic_with_signed_payload {
+					payload,
+					signature,
+				},
+			) {
+				match res {
+					Ok(()) => {
+						log::info!("OCW ==> unsigned tx with signed payload successfully sent.");
+					},
+					Err(()) => {
+						log::error!("OCW ==> sending unsigned tx with signed payload failed.");
+					},
+				};
+			} else {
+				// The case of `None`: no account is available for sending
+				log::error!("OCW ==> No local account available");
+			}
 			//
 			// step3: storage in loacl
 			// make the  data
